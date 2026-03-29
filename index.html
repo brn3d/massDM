@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MassDM</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="modal-overlay" id="modal" onclick="modalClose()">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-msg" id="modal-msg"></div>
+    <div class="modal-actions" id="modal-actions"></div>
+  </div>
+</div>
+
+<div class="shell">
+
+  <header>
+    <div class="header-left">
+      <span class="logo">massdm</span>
+      <span class="tag">@ajsdkf</span>
+    </div>
+    <div class="header-right">
+      <span class="token-pill" id="token-count-badge-top">0 tokens</span>
+    </div>
+  </header>
+
+  <nav>
+    <button class="active" onclick="showPage('massdm',this)">mass dm</button>
+    <button onclick="showPage('tokens',this)">tokens</button>
+    <button onclick="showPage('message',this)">message</button>
+    <button onclick="showPage('checker',this)">checker</button>
+    <button onclick="showPage('log',this)">log</button>
+  </nav>
+
+  <main>
+
+    <!-- Mass DM -->
+    <div class="page active" id="page-massdm">
+      <div class="stat-row">
+        <div class="stat"><span class="sval" id="stat-sent">0</span><span class="slbl">sent</span></div>
+        <div class="stat"><span class="sval" id="stat-failed">0</span><span class="slbl">failed</span></div>
+        <div class="stat"><span class="sval" id="stat-tokens">0</span><span class="slbl">tokens</span></div>
+        <div class="stat"><span class="sval" id="stat-status">idle</span><span class="slbl">status</span></div>
+      </div>
+
+      <div class="tab-bar">
+        <button class="tab active" onclick="switchDMTab('single',this)">single server</button>
+        <button class="tab" onclick="switchDMTab('global',this)">global</button>
+      </div>
+
+      <div id="dm-single">
+        <div class="panel">
+          <div class="field">
+            <label>guild id</label>
+            <input type="text" id="guild-id" placeholder="123456789012345678">
+          </div>
+          <div class="field">
+            <label>message preview</label>
+            <textarea id="msg-preview" readonly rows="3"></textarea>
+          </div>
+          <div class="actions">
+            <button class="btn-run" onclick="startMassDM('single')">▶ start</button>
+            <button class="btn-stop" onclick="stopDM()">■ stop</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="dm-global" style="display:none">
+        <div class="panel">
+          <div class="field">
+            <label>message preview</label>
+            <textarea id="msg-preview-global" readonly rows="3"></textarea>
+          </div>
+          <div class="actions">
+            <button class="btn-run" onclick="startMassDM('global')">▶ start global</button>
+            <button class="btn-stop" onclick="stopDM()">■ stop</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel log-panel">
+        <div class="log-header">
+          <span>output</span>
+          <div class="progress-wrap"><div class="progress-bar" id="dm-progress" style="width:0%"></div></div>
+        </div>
+        <div class="log" id="dm-log"><div class="log-line log-info">[~] ready.</div></div>
+      </div>
+    </div>
+
+    <!-- Tokens -->
+    <div class="page" id="page-tokens">
+      <div class="two-col">
+        <div class="panel">
+          <div class="panel-title">add tokens</div>
+          <div class="field">
+            <div class="input-row">
+              <input type="password" id="new-token" placeholder="bot token">
+              <button class="btn-sm-run" onclick="addToken()">add</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>bulk import — one per line</label>
+            <textarea id="bulk-tokens" rows="6" placeholder="token1&#10;token2&#10;token3"></textarea>
+          </div>
+          <div class="actions">
+            <button class="btn-ghost" onclick="bulkImport()">import</button>
+            <button class="btn-del" onclick="clearTokens()">clear all</button>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">loaded <span id="token-list-count" style="color:var(--accent)">0</span></div>
+          <div id="token-list"><p class="empty">no tokens loaded.</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Message -->
+    <div class="page" id="page-message">
+      <div class="panel" style="max-width:640px">
+        <div class="panel-title">dm message</div>
+        <div class="field">
+          <textarea id="dm-message" rows="10" placeholder="enter message..."></textarea>
+        </div>
+        <div class="field inline-field">
+          <label>delay (seconds)</label>
+          <input type="text" id="dm-delay" value="1" style="width:70px">
+        </div>
+        <div class="actions">
+          <button class="btn-run" onclick="saveMessage()">save</button>
+          <span id="msg-saved" class="saved-notice">saved</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Checker -->
+    <div class="page" id="page-checker">
+      <div class="panel" style="max-width:640px">
+        <div class="panel-title">token checker</div>
+        <p class="dim-text">validates each token against the discord api.</p>
+        <div class="actions" style="margin-top:12px">
+          <button class="btn-run" onclick="checkTokens()">▶ check all</button>
+        </div>
+      </div>
+      <div class="panel" style="max-width:640px">
+        <div class="panel-title">results</div>
+        <div id="checker-results"><p class="empty">run checker to see results.</p></div>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div class="page" id="page-log">
+      <div class="panel log-panel">
+        <div class="log-header">
+          <span>activity log</span>
+          <button class="btn-ghost btn-xs" onclick="clearLog()">clear</button>
+        </div>
+        <div class="log" id="activity-log" style="height:560px"><div class="log-line log-info">[~] no activity yet.</div></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<audio id="bg-audio" loop><source src="audio/music.mp3" type="audio/mpeg"></audio>
+<script src="js/app.js"></script>
+</body>
+</html>
