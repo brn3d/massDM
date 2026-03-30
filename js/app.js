@@ -1,28 +1,23 @@
-// ── Storage ───────────────────────────────────────────────────────────────────
 const S = {
   get: k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
   set: (k, v) => localStorage.setItem(k, JSON.stringify(v)),
 };
 
-// ── State ─────────────────────────────────────────────────────────────────────
 let tokens    = S.get('tokens')    || [];
-let tokenMeta = S.get('tokenMeta') || {}; // { token: { username, avatar, id } }
+let tokenMeta = S.get('tokenMeta') || {};
 let dmMessage = S.get('dmMessage') || '';
 let dmDelay   = parseFloat(S.get('dmDelay') || '1');
 let actLog    = S.get('actLog')    || [];
 let statSent = 0, statFailed = 0;
 let dmRunning = false, dmStop = false;
-// store check results separately so they survive tab switches
-let tokenStatus = S.get('tokenStatus') || {}; // { token: 'valid'|'invalid' }
-let serverCache = S.get('serverCache') || {}; // { guildId: { ...info } }
-let templates   = S.get('templates')   || []; // [{ id, name, content }]
-// per-token counters: { token: { sent, failed } }
+let tokenStatus = S.get('tokenStatus') || {};
+let serverCache = S.get('serverCache') || {};
+let templates   = S.get('templates')   || [];
 let tokenStats = {};
 
 const DISCORD = 'https://discord.com/api/v10';
 const PROXY   = url => `https://super-unit-b274.60uhsss.workers.dev/?url=${encodeURIComponent(url)}`;
 
-// ── Modal ─────────────────────────────────────────────────────────────────────
 function modalShow(msg, buttons) {
   document.getElementById('modal-msg').textContent = msg;
   const a = document.getElementById('modal-actions');
@@ -38,7 +33,6 @@ function modalShow(msg, buttons) {
 }
 function modalClose() {
   document.getElementById('modal').classList.remove('open');
-  // remove any injected prompt input
   const injected = document.querySelector('#modal-msg + input');
   if (injected) injected.remove();
 }
@@ -88,7 +82,6 @@ function init() {
   if (S.get('sidebarCollapsed')) document.getElementById('sidebar').classList.add('sidebar-collapsed');
 }
 
-// ── Audio (bg) ────────────────────────────────────────────────────────────────
 function playAudio() {
   const audio = document.getElementById('bg-audio');
   if (!audio) return;
@@ -97,7 +90,6 @@ function playAudio() {
   document.addEventListener('click', tryPlay, { once: true });
 }
 
-// ── Navigation ────────────────────────────────────────────────────────────────
 function toggleSidebar() {
   const collapsed = document.getElementById('sidebar').classList.toggle('sidebar-collapsed');
   S.set('sidebarCollapsed', collapsed);
@@ -125,10 +117,8 @@ function syncPreviews() {
   if (g) g.value = dmMessage;
 }
 
-// ── Tokens ────────────────────────────────────────────────────────────────────
 function saveTokens() {
   S.set('tokens', tokens);
-  // prune meta for removed tokens
   Object.keys(tokenMeta).forEach(k => { if (!tokens.includes(k)) delete tokenMeta[k]; });
   S.set('tokenMeta', tokenMeta);
   updateBadge(); renderTokens(); updateStats();
@@ -186,7 +176,6 @@ function renderTokens() {
     const status = tokenStatus[t] || 'pending';
     const initial = meta ? meta.username[0].toUpperCase() : '?';
 
-    // wsrv.nl proxies the image with proper CORS headers
     const avatarHtml = (meta && meta.avatarUrl)
       ? `<img class="bot-avatar" src="${meta.avatarUrl}" onerror="this.outerHTML='<div class=bot-avatar-placeholder>${initial}</div>'">`
       : `<div class="bot-avatar-placeholder">${initial}</div>`;
@@ -222,7 +211,6 @@ function updateTokenItem(i, token, statusType) {
   const meta = tokenMeta[token];
   if (!meta) return;
   const item = items[i];
-  // replace avatar
   const oldAvatar = item.querySelector('.bot-avatar, .bot-avatar-placeholder');
   const initial = meta.username[0].toUpperCase();
   if (meta.avatarUrl) {
@@ -235,13 +223,11 @@ function updateTokenItem(i, token, statusType) {
     const ph = makeInitialAvatar(initial);
     if (oldAvatar) oldAvatar.replaceWith(ph); else item.prepend(ph);
   }
-  // replace name
   const oldName = item.querySelector('.token-val, .bot-name');
   const nameEl = document.createElement('span');
   nameEl.className = 'bot-name';
   nameEl.textContent = meta.username;
   if (oldName) oldName.replaceWith(nameEl);
-  // update status badge
   const badge = document.getElementById('ts-' + i);
   if (badge) {
     badge.textContent = statusType;
@@ -256,7 +242,6 @@ function updateBadge() {
   if (lc) lc.textContent = tokens.length;
 }
 
-// ── Message ───────────────────────────────────────────────────────────────────
 function saveMessage() {
   dmMessage = document.getElementById('dm-message').value;
   dmDelay   = parseFloat(document.getElementById('dm-delay').value) || 1;
@@ -268,7 +253,6 @@ function saveMessage() {
   log('info', '[~] Message saved');
 }
 
-// ── Templates ─────────────────────────────────────────────────────────────────
 function saveTemplates() {
   S.set('templates', templates);
   renderTemplates();
@@ -323,7 +307,6 @@ function renderTemplates() {
     </div>`).join('');
 }
 
-// ── Stats ─────────────────────────────────────────────────────────────────────
 function updateStats() {
   document.getElementById('stat-sent').textContent   = statSent;
   document.getElementById('stat-failed').textContent = statFailed;
@@ -332,7 +315,6 @@ function updateStats() {
 function setStatus(s) { document.getElementById('stat-status').textContent = s; }
 function setProgress(p) { document.getElementById('dm-progress').style.width = Math.min(100, p) + '%'; }
 
-// ── Log ───────────────────────────────────────────────────────────────────────
 function log(type, msg) {
   const ts = new Date().toLocaleTimeString();
   actLog.push({ type, msg, ts });
@@ -360,7 +342,6 @@ function renderActivityLog() {
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-// ── Discord API ───────────────────────────────────────────────────────────────
 async function dGet(path, token) {
   const r = await fetch(PROXY(`${DISCORD}${path}`), {
     headers: { Authorization: `Bot ${token}` },
@@ -379,7 +360,6 @@ async function dPost(path, token, body) {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// ── Server Checker ────────────────────────────────────────────────────────────
 let scRunning = false;
 
 async function checkAllServers() {
@@ -392,8 +372,7 @@ async function checkAllServers() {
   el.innerHTML   = '<p class="dim-text">collecting guilds...</p>';
   document.getElementById('sc-count').textContent = '0';
 
-  // step 1: collect unique guild ids across all tokens
-  const guildTokenMap = {}; // { guildId: firstWorkingToken }
+  const guildTokenMap = {};
   for (let i = 0; i < tokens.length; i++) {
     statusEl.textContent = `token ${i+1}/${tokens.length}...`;
     try {
@@ -413,7 +392,6 @@ async function checkAllServers() {
     return;
   }
 
-  // step 2: fetch full info for each unique guild
   el.innerHTML = '';
   let fetched = 0;
   for (const gid of guildIds) {
@@ -425,7 +403,6 @@ async function checkAllServers() {
       document.getElementById('sc-count').textContent = fetched;
       el.innerHTML += buildServerCard(guild);
     } catch {
-      // skip guilds we can't fetch
     }
     await sleep(300);
   }
@@ -479,8 +456,6 @@ function restoreServerCache() {
   document.getElementById('sc-count').textContent = ids.length;
 }
 
-
-// ── Embed Builder ─────────────────────────────────────────────────────────────
 function getEmbedPayload() {
   const title      = document.getElementById('eb-title').value.trim();
   const desc       = document.getElementById('eb-desc').value.trim();
@@ -610,27 +585,22 @@ async function sendEmbedDM() {
   setTimeout(() => statusEl.textContent = '', 5000);
 }
 
-// ── Webhook ───────────────────────────────────────────────────────────────────
 function renderWebhookPreview() {
   const username = document.getElementById('wh-username').value.trim();
   const avatar   = document.getElementById('wh-avatar').value.trim();
   const content  = document.getElementById('wh-content').value;
   const useEmbed = document.getElementById('wh-embed').checked;
 
-  // name
   document.getElementById('wh-preview-name').textContent = username || 'webhook';
 
-  // avatar
   const img = document.getElementById('wh-avatar-img');
   if (avatar) { img.src = avatar; img.style.display = ''; }
   else img.style.display = 'none';
 
-  // content
   const contentEl = document.getElementById('wh-preview-content');
   contentEl.textContent = content;
   contentEl.style.display = content ? '' : 'none';
 
-  // embed mirror
   const embedWrap = document.getElementById('wh-preview-embed-wrap');
   if (useEmbed) {
     embedWrap.style.display = '';
@@ -759,11 +729,10 @@ async function checkTokens() {
     }
     await sleep(400);
   }
-  renderTokens(); // refresh sidebar list with avatars
+  renderTokens();
   log('info', '[~] done.');
 }
 
-// ── Mass DM ───────────────────────────────────────────────────────────────────
 function stopDM() { dmStop = true; log('warn', '[■] Stopping...'); }
 
 async function startMassDM(mode) {
@@ -789,7 +758,6 @@ async function startMassDM(mode) {
   dmRunning = false;
   setStatus(dmStop ? 'Stopped' : 'Done');
   log('info', `[✓] done — sent: ${statSent}, failed: ${statFailed}`);
-  // per-token breakdown
   tokens.forEach((t, i) => {
     const s = tokenStats[t];
     if (!s || (s.sent === 0 && s.failed === 0)) return;
@@ -829,7 +797,7 @@ async function dmGlobal() {
   }
   const guildIds = Object.keys(guildMap);
   log('info', `[~] ${guildIds.length} guild(s). Fetching members...`);
-  const seen = new Map(); // id -> { id, username }
+  const seen = new Map();
   for (let gi = 0; gi < guildIds.length; gi++) {
     if (dmStop) break;
     const gid = guildIds[gi];
@@ -866,7 +834,6 @@ async function fetchGuildMembers(guildId, token) {
   return members;
 }
 
-// ── Variable substitution ─────────────────────────────────────────────────────
 const DISCORD_ERRORS = {
   50007: 'cannot send messages to this user (DMs closed)',
   50278: 'user cannot be DMed (no mutual server or DMs disabled)',
@@ -879,7 +846,6 @@ const DISCORD_ERRORS = {
 };
 
 function applyVars(template, user) {
-  // user = { id, username }
   return template
     .replace(/\{username\}/gi,  user.username || 'user')
     .replace(/\{userid\}/gi,    user.id)
@@ -890,7 +856,6 @@ function applyVars(template, user) {
 async function dmMembers(userEntries, toks) {
   if (!toks.length) return;
 
-  // split entries evenly across tokens and run all concurrently
   const chunks = toks.map((_, ti) =>
     userEntries.filter((_, i) => i % toks.length === ti)
   );
