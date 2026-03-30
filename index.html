@@ -17,28 +17,58 @@
 
 <div class="shell">
 
-  <header>
-    <div class="header-left">
+  <nav id="sidebar">
+    <div class="nav-logo">
       <span class="logo">massdm</span>
       <span class="tag">@ajsdkf</span>
+      <span class="logo-collapsed">mdm</span>
     </div>
-    <div class="header-right">
+    <div class="nav-links">
+      <button class="active" onclick="showPage('massdm',this)" data-label="mass dm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span>mass dm</span>
+      </button>
+      <button onclick="showPage('tokens',this)" data-label="tokens">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span>tokens</span>
+      </button>
+      <button onclick="showPage('message',this)" data-label="message">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14l4-4h14a2 2 0 0 0 2-2v-5"/><path d="M18 2l4 4-8 8H10v-4l8-8z"/></svg>
+        <span>message</span>
+      </button>
+      <button onclick="showPage('checker',this)" data-label="checker">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        <span>checker</span>
+      </button>
+      <button onclick="showPage('embed',this)" data-label="embed">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        <span>embed</span>
+      </button>
+      <button onclick="showPage('webhook',this)" data-label="webhook">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+        <span>webhook</span>
+      </button>
+      <button onclick="showPage('log',this)" data-label="log">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span>log</span>
+      </button>
+    </div>
+    <div class="nav-footer">
       <span class="token-pill" id="token-count-badge-top">0 tokens</span>
+      <div class="vol-row">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" style="flex-shrink:0;color:var(--text2)"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+        <input type="range" id="bg-vol" min="0" max="100" value="40" oninput="document.getElementById('bg-audio').volume=this.value/100">
+      </div>
     </div>
-  </header>
-
-  <nav>
-    <button class="active" onclick="showPage('massdm',this)">mass dm</button>
-    <button onclick="showPage('tokens',this)">tokens</button>
-    <button onclick="showPage('message',this)">message</button>
-    <button onclick="showPage('checker',this)">checker</button>
-    <button onclick="showPage('log',this)">log</button>
   </nav>
 
+  <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" title="collapse"><span class="sidebar-toggle-icon">‹</span></button>
+
+  <div class="shell-body">
   <main>
 
     <!-- Mass DM -->
-    <div class="page active" id="page-massdm">
+    <div class="page active" id="page-massdm" data-title="mass dm">
       <div class="stat-row">
         <div class="stat"><span class="sval" id="stat-sent">0</span><span class="slbl">sent</span></div>
         <div class="stat"><span class="sval" id="stat-failed">0</span><span class="slbl">failed</span></div>
@@ -91,7 +121,7 @@
     </div>
 
     <!-- Tokens -->
-    <div class="page" id="page-tokens">
+    <div class="page" id="page-tokens" data-title="tokens">
       <div class="two-col">
         <div class="panel">
           <div class="panel-title">add tokens</div>
@@ -118,40 +148,283 @@
     </div>
 
     <!-- Message -->
-    <div class="page" id="page-message">
-      <div class="panel" style="max-width:640px">
-        <div class="panel-title">dm message</div>
-        <div class="field">
-          <textarea id="dm-message" rows="10" placeholder="enter message..."></textarea>
+    <div class="page" id="page-message" data-title="message">
+      <div class="two-col">
+        <div>
+          <div class="panel">
+            <div class="panel-title">dm message</div>
+            <div class="field">
+              <textarea id="dm-message" rows="10" placeholder="enter message..."></textarea>
+            </div>
+            <div class="field inline-field">
+              <label>delay (seconds)</label>
+              <input type="text" id="dm-delay" value="1" style="width:70px">
+            </div>
+            <div class="actions">
+              <button class="btn-run" onclick="saveMessage()">save</button>
+              <button class="btn-ghost" onclick="saveMessageAs()">save as template</button>
+              <span id="msg-saved" class="saved-notice">saved</span>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">variables</div>
+            <p class="dim-text" style="margin-bottom:12px">use these in your message to personalise each dm.</p>
+            <div class="var-table">
+              <span class="var-tag">{username}</span><span class="dim-text">their username</span>
+              <span class="var-tag">{mention}</span><span class="dim-text">pings them inline</span>
+              <span class="var-tag">{userid}</span><span class="dim-text">their discord id</span>
+              <span class="var-tag">&lt;@userid&gt;</span><span class="dim-text">same as {mention}, raw discord syntax</span>
+            </div>
+            <div class="var-example">
+              <div class="var-example-label">example</div>
+              <pre>
+yo {username} 
+{mention} come check us out
+
+discord.gg/example
+              </pre>
+            </div>
+          </div>
         </div>
-        <div class="field inline-field">
-          <label>delay (seconds)</label>
-          <input type="text" id="dm-delay" value="1" style="width:70px">
-        </div>
-        <div class="actions">
-          <button class="btn-run" onclick="saveMessage()">save</button>
-          <span id="msg-saved" class="saved-notice">saved</span>
+        <div>
+          <div class="panel">
+            <div class="panel-title">saved templates <span id="tpl-count" style="color:var(--accent)">0</span></div>
+            <div id="tpl-list"><p class="empty">no templates saved.</p></div>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- Checker -->
-    <div class="page" id="page-checker">
-      <div class="panel" style="max-width:640px">
-        <div class="panel-title">token checker</div>
-        <p class="dim-text">validates each token against the discord api.</p>
-        <div class="actions" style="margin-top:12px">
-          <button class="btn-run" onclick="checkTokens()">▶ check all</button>
+    <div class="page" id="page-checker" data-title="checker">
+      <div class="checker-layout">
+        <!-- left: token checker -->
+        <div class="checker-col">
+          <div class="panel">
+            <div class="panel-title">token checker</div>
+            <p class="dim-text">validates each token against the discord api.</p>
+            <div class="actions" style="margin-top:12px">
+              <button class="btn-run" onclick="checkTokens()">▶ check all</button>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">results</div>
+            <div id="checker-results"><p class="empty">run checker to see results.</p></div>
+          </div>
+        </div>
+        <!-- right: server checker -->
+        <div class="checker-col">
+          <div class="panel">
+            <div class="panel-title">server checker</div>
+            <p class="dim-text">fetches every server each bot is in — duplicates are merged by guild id.</p>
+            <div class="actions" style="margin-top:12px">
+              <button class="btn-run" onclick="checkAllServers()">▶ check all servers</button>
+              <button class="btn-ghost" onclick="clearServerCache()">clear</button>
+              <span id="sc-status" class="dim-text"></span>
+            </div>
+          </div>
+          <div class="panel" id="sc-result-panel">
+            <div class="panel-title">servers <span id="sc-count" style="color:var(--accent)">0</span></div>
+            <div id="sc-result"><p class="empty">run server checker to see results.</p></div>
+          </div>
         </div>
       </div>
-      <div class="panel" style="max-width:640px">
-        <div class="panel-title">results</div>
-        <div id="checker-results"><p class="empty">run checker to see results.</p></div>
+    </div>
+
+    <!-- Embed Builder -->
+    <div class="page" id="page-embed" data-title="embed builder">
+      <div class="embed-layout">
+        <div class="embed-col">
+          <div class="panel">
+            <div class="panel-title">embed builder</div>
+            <div class="field">
+              <label>title</label>
+              <input type="text" id="eb-title" placeholder="embed title" oninput="renderEmbedPreview()">
+            </div>
+            <div class="field">
+              <label>description</label>
+              <textarea id="eb-desc" rows="4" placeholder="embed description..." oninput="renderEmbedPreview()"></textarea>
+            </div>
+            <div class="field">
+              <label>url (title link)</label>
+              <input type="text" id="eb-url" placeholder="https://..." oninput="renderEmbedPreview()">
+            </div>
+            <div class="field inline-field">
+              <label>color</label>
+              <input type="color" id="eb-color" value="#7b68ee" oninput="renderEmbedPreview()" style="width:40px;height:28px;padding:2px;cursor:pointer;border-radius:3px;">
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">author</div>
+            <div class="field">
+              <label>name</label>
+              <input type="text" id="eb-author-name" placeholder="author name" oninput="renderEmbedPreview()">
+            </div>
+            <div class="field">
+              <label>icon url</label>
+              <input type="text" id="eb-author-icon" placeholder="https://..." oninput="renderEmbedPreview()">
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">images</div>
+            <div class="field">
+              <label>thumbnail url</label>
+              <input type="text" id="eb-thumbnail" placeholder="https://..." oninput="renderEmbedPreview()">
+            </div>
+            <div class="field">
+              <label>image url</label>
+              <input type="text" id="eb-image" placeholder="https://..." oninput="renderEmbedPreview()">
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">footer</div>
+            <div class="field">
+              <label>text</label>
+              <input type="text" id="eb-footer-text" placeholder="footer text" oninput="renderEmbedPreview()">
+            </div>
+            <div class="field">
+              <label>icon url</label>
+              <input type="text" id="eb-footer-icon" placeholder="https://..." oninput="renderEmbedPreview()">
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">send</div>
+            <p class="dim-text" style="margin-bottom:12px">send this embed to a channel or as a mass dm.</p>
+            <div class="field">
+              <label>channel id — send to channel via bot</label>
+              <div class="input-row">
+                <input type="text" id="eb-channel-id" placeholder="channel id">
+                <button class="btn-sm-run" onclick="sendEmbed()">send embed</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>guild id — mass dm embed to all members</label>
+              <div class="input-row">
+                <input type="text" id="eb-guild-id" placeholder="guild id">
+                <button class="btn-sm-run" onclick="sendEmbedDM()">send dm</button>
+              </div>
+            </div>
+            <span id="eb-status" class="dim-text" style="margin-top:6px;display:block"></span>
+          </div>
+        </div>
+        <div class="embed-col">
+          <div class="panel">
+            <div class="panel-title">preview</div>
+            <div id="eb-preview-wrap">
+              <div class="discord-msg">
+                <div class="discord-avatar"></div>
+                <div class="discord-bubble">
+                  <span class="discord-bot-name">bot <span class="discord-bot-tag">APP</span></span>
+                  <div id="eb-preview" class="discord-embed">
+                    <div class="de-pill" id="de-pill"></div>
+                    <div class="de-body">
+                      <div class="de-author" id="de-author" style="display:none">
+                        <img class="de-author-icon" id="de-author-icon" src="" style="display:none">
+                        <span id="de-author-name"></span>
+                      </div>
+                      <div class="de-title" id="de-title"></div>
+                      <div class="de-desc" id="de-desc"></div>
+                      <img class="de-image" id="de-image" src="" style="display:none">
+                      <div class="de-footer" id="de-footer" style="display:none">
+                        <img class="de-footer-icon" id="de-footer-icon" src="" style="display:none">
+                        <span id="de-footer-text"></span>
+                      </div>
+                    </div>
+                    <img class="de-thumbnail" id="de-thumbnail" src="" style="display:none">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">json payload</div>
+            <pre id="eb-json" class="embed-json"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Webhook -->
+    <div class="page" id="page-webhook" data-title="webhook">
+      <div class="embed-layout">
+        <div class="embed-col">
+          <div class="panel">
+            <div class="panel-title">webhook message</div>
+            <p class="dim-text" style="margin-bottom:12px">send a message or embed to a discord webhook url.</p>
+            <div class="field">
+              <label>webhook url</label>
+              <input type="text" id="wh-url" placeholder="https://discord.com/api/webhooks/..." oninput="renderWebhookPreview()">
+            </div>
+            <div class="field">
+              <label>username (optional)</label>
+              <input type="text" id="wh-username" placeholder="override bot name" oninput="renderWebhookPreview()">
+            </div>
+            <div class="field">
+              <label>avatar url (optional)</label>
+              <input type="text" id="wh-avatar" placeholder="https://..." oninput="renderWebhookPreview()">
+            </div>
+            <div class="field">
+              <label>message content</label>
+              <textarea id="wh-content" rows="5" placeholder="message content..." oninput="renderWebhookPreview()"></textarea>
+            </div>
+            <div class="field inline-field">
+              <label>attach embed from builder</label>
+              <label class="toggle" style="margin-left:8px">
+                <input type="checkbox" id="wh-embed" onchange="renderWebhookPreview()">
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+            </div>
+            <div class="actions">
+              <button class="btn-run" onclick="sendWebhook()">▶ send</button>
+              <span id="wh-status" class="dim-text"></span>
+            </div>
+          </div>
+          <div class="panel log-panel">
+            <div class="log-header"><span>output</span></div>
+            <div class="log" id="wh-log"><div class="log-line log-info">[~] ready.</div></div>
+          </div>
+        </div>
+        <div class="embed-col">
+          <div class="panel">
+            <div class="panel-title">preview</div>
+            <div class="discord-msg">
+              <div class="discord-avatar" id="wh-preview-avatar" style="background:var(--border2);overflow:hidden">
+                <img id="wh-avatar-img" src="" style="width:100%;height:100%;object-fit:cover;display:none">
+              </div>
+              <div class="discord-bubble">
+                <span class="discord-bot-name">
+                  <span id="wh-preview-name">webhook</span>
+                  <span class="discord-bot-tag">WEBHOOK</span>
+                </span>
+                <div id="wh-preview-content" class="wh-preview-text"></div>
+                <div id="wh-preview-embed-wrap" style="display:none">
+                  <div class="discord-embed">
+                    <div class="de-pill" id="wh-de-pill"></div>
+                    <div class="de-body">
+                      <div class="de-author" id="wh-de-author" style="display:none">
+                        <img class="de-author-icon" id="wh-de-author-icon" src="" style="display:none">
+                        <span id="wh-de-author-name"></span>
+                      </div>
+                      <div class="de-title" id="wh-de-title" style="display:none"></div>
+                      <div class="de-desc" id="wh-de-desc" style="display:none"></div>
+                      <img class="de-image" id="wh-de-image" src="" style="display:none">
+                      <div class="de-footer" id="wh-de-footer" style="display:none">
+                        <img class="de-footer-icon" id="wh-de-footer-icon" src="" style="display:none">
+                        <span id="wh-de-footer-text"></span>
+                      </div>
+                    </div>
+                    <img class="de-thumbnail" id="wh-de-thumbnail" src="" style="display:none">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- Log -->
-    <div class="page" id="page-log">
+    <div class="page" id="page-log" data-title="log">
       <div class="panel log-panel">
         <div class="log-header">
           <span>activity log</span>
@@ -162,6 +435,8 @@
     </div>
 
   </main>
+  </div>
+
 </div>
 
 <audio id="bg-audio" loop><source src="audio/music.mp3" type="audio/mpeg"></audio>

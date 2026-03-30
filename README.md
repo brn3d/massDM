@@ -1,38 +1,58 @@
 # MassDM
 
-A web-based Discord mass DM tool hosted on GitHub Pages. Tokens, messages, and logs are stored locally in your browser — nothing is ever sent anywhere except Discord's API directly.
-
-## Features
-
-- Multi-token support with bulk import
-- Token validation against the Discord API (with avatar/username display)
-- Single server or global DM mode
-- Configurable delay between messages
-- Real-time output log with per-token stats
-- Background music player (looped)
-- All data persisted in `localStorage`
-
-## Usage
-
-1. Go to the **Tokens** tab — add tokens one by one or bulk import (one per line)
-2. Go to the **Message** tab — write your DM and set the delay (seconds between sends)
-3. Go to the **Checker** tab — optionally validate tokens before running
-4. Go to the **Mass DM** tab:
-   - **Single server**: enter a Guild ID and hit start
-   - **Global**: iterates all guilds across all tokens and DMs unique members
+A web-based Discord mass DM tool. Tokens, messages, and all data are stored locally in your browser — nothing is sent anywhere except Discord's API directly.
 
 ## Tabs
 
 | Tab | Description |
 |-----|-------------|
-| mass dm | Run DM campaigns, view live output and progress |
-| tokens | Add, import, and manage bot tokens |
-| message | Set the DM content and send delay |
-| checker | Validate tokens against the Discord API |
+| mass dm | Run DM campaigns with live output, progress bar, and per-token stats |
+| tokens | Add, bulk import, copy, and remove bot tokens |
+| message | Write your DM, set delay, save message templates, variable reference |
+| checker | Validate tokens + bulk check every server each bot is in |
+| embed | Build and preview Discord embeds, send to a channel or mass DM |
+| webhook | Send messages and embeds to a webhook URL with live preview |
 | log | Full activity log with timestamps |
+
+## Features
+
+- Multi-token support with bulk import
+- Token validation with avatar/username display
+- Single server or global DM mode
+- Concurrent sending — each token runs its own loop in parallel
+- Configurable delay between messages per token
+- Message variables: `{username}`, `{mention}`, `{userid}`, `<@userid>`
+- Message templates — save, load, rename, delete
+- Embed builder with live Discord-style preview and JSON payload
+- Webhook sender with live preview, optional embed attach
+- Token checker with server checker — deduplicates by guild ID
+- Collapsible sidebar with volume control for background music
+- Friendly error messages for Discord API codes (50007, 50278, etc.)
+- All data persisted in `localStorage`
+
+## Usage
+
+1. **Tokens** — add tokens one by one or bulk import (one per line)
+2. **Message** — write your DM, set delay, optionally save as a template
+3. **Checker** — validate tokens, check all servers bots are in
+4. **Mass DM**:
+   - *Single server*: enter a Guild ID and hit start
+   - *Global*: iterates all guilds across all tokens, DMs unique members
+
+## Variables
+
+Use these in your message to personalise each DM:
+
+| Variable | Output |
+|----------|--------|
+| `{username}` | recipient's username |
+| `{mention}` | pings them inline |
+| `{userid}` | their Discord ID |
+| `<@userid>` | same as `{mention}`, raw Discord syntax |
 
 ## Notes
 
-- All data (tokens, message, logs) is saved in `localStorage` — clearing your browser will wipe it
-- Token statuses (`valid` / `invalid` / `pending`) persist across page reloads
-- Per-token sent/failed counts are shown in the log after each run
+- All data (tokens, message, logs, templates, server cache) is saved in `localStorage` — clearing your browser will wipe it
+- Token statuses persist across reloads
+- Concurrent DM sending scales with token count — 5 tokens at 1s delay = ~5 DMs/sec
+- Per-token sent/failed breakdown shown in log after each run

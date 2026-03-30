@@ -14,6 +14,8 @@ let statSent = 0, statFailed = 0;
 let dmRunning = false, dmStop = false;
 // store check results separately so they survive tab switches
 let tokenStatus = S.get('tokenStatus') || {}; // { token: 'valid'|'invalid' }
+let serverCache = S.get('serverCache') || {}; // { guildId: { ...info } }
+let templates   = S.get('templates')   || []; // [{ id, name, content }]
 // per-token counters: { token: { sent, failed } }
 let tokenStats = {};
 
@@ -34,13 +36,38 @@ function modalShow(msg, buttons) {
   });
   document.getElementById('modal').classList.add('open');
 }
-function modalClose() { document.getElementById('modal').classList.remove('open'); }
+function modalClose() {
+  document.getElementById('modal').classList.remove('open');
+  // remove any injected prompt input
+  const injected = document.querySelector('#modal-msg + input');
+  if (injected) injected.remove();
+}
 function modalAlert(msg) { modalShow(msg, [{ label: 'ok', primary: true }]); }
 function modalConfirm(msg, onYes) {
   modalShow(msg, [
     { label: 'cancel' },
     { label: 'confirm', primary: true, action: onYes },
   ]);
+}
+function modalPrompt(msg, defaultVal, onSubmit) {
+  document.getElementById('modal-msg').textContent = msg;
+  const a = document.getElementById('modal-actions');
+  a.innerHTML = '';
+  const input = document.createElement('input');
+  input.type = 'text'; input.value = defaultVal || '';
+  input.className = ''; input.style.cssText = 'width:100%;margin-bottom:12px;background:var(--bg);border:1px solid var(--border2);color:var(--text);padding:8px 10px;border-radius:3px;font-family:inherit;font-size:12.5px;outline:none;';
+  document.getElementById('modal-msg').after(input);
+  input.focus(); input.select();
+  const submit = () => { const v = input.value.trim(); modalClose(); if (v) onSubmit(v); };
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') modalClose(); });
+  const cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'cancel'; cancelBtn.className = 'btn-ghost';
+  cancelBtn.onclick = () => modalClose();
+  const okBtn = document.createElement('button');
+  okBtn.textContent = 'ok'; okBtn.className = 'btn-run';
+  okBtn.onclick = submit;
+  a.appendChild(cancelBtn); a.appendChild(okBtn);
+  document.getElementById('modal').classList.add('open');
 }
 
 
@@ -50,28 +77,38 @@ function init() {
   document.getElementById('dm-delay').value   = dmDelay;
   syncPreviews();
   renderActivityLog();
+  renderTemplates();
   playAudio();
+  restoreServerCache();
+
+  const savedPage = S.get('activePage') || 'massdm';
+  const navBtn = document.querySelector(`#sidebar button[onclick="showPage('${savedPage}',this)"]`);
+  if (navBtn) showPage(savedPage, navBtn);
+
+  if (S.get('sidebarCollapsed')) document.getElementById('sidebar').classList.add('sidebar-collapsed');
 }
 
-// ── Audio ─────────────────────────────────────────────────────────────────────
+// ── Audio (bg) ────────────────────────────────────────────────────────────────
 function playAudio() {
   const audio = document.getElementById('bg-audio');
   if (!audio) return;
-  // Autoplay requires a user gesture on most browsers.
-  // We try immediately, then fall back to playing on first click.
   const tryPlay = () => { audio.volume = 0.4; audio.play().catch(() => {}); };
   tryPlay();
   document.addEventListener('click', tryPlay, { once: true });
 }
 
 // ── Navigation ────────────────────────────────────────────────────────────────
+function toggleSidebar() {
+  const collapsed = document.getElementById('sidebar').classList.toggle('sidebar-collapsed');
+  S.set('sidebarCollapsed', collapsed);
+}
+
 function showPage(id, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#sidebar button').forEach(b => b.classList.remove('active'));
   document.getElementById('page-' + id).classList.add('active');
   btn.classList.add('active');
-  const titles = { massdm:'Mass DM', tokens:'Tokens', message:'Message', checker:'Token Checker', log:'Activity Log' };
-  document.getElementById('page-title').textContent = titles[id] || id;
+  S.set('activePage', id);
   if (id === 'massdm') syncPreviews();
 }
 
@@ -105,6 +142,13 @@ function addToken() {
   document.getElementById('new-token').value = '';
   saveTokens();
   log('info', `[+] Token added (${mask(v)})`);
+}
+
+function copyToken(i) {
+  navigator.clipboard.writeText(tokens[i]).then(() => {
+    const btn = document.querySelectorAll('.token-item')[i]?.querySelector('[onclick^="copyToken"]');
+    if (btn) { btn.textContent = '✓'; setTimeout(() => btn.textContent = '⎘', 1200); }
+  });
 }
 
 function removeToken(i) {
@@ -158,6 +202,7 @@ function renderTokens() {
       ${avatarHtml}
       ${nameHtml}
       <span class="${statusClass}" id="ts-${i}">${statusLabel}</span>
+      <button class="btn-ghost btn-xs" onclick="copyToken(${i})" title="copy">⎘</button>
       <button class="btn-ghost btn-xs" onclick="removeToken(${i})">✕</button>
     </div>`;
   }).join('');
@@ -223,6 +268,61 @@ function saveMessage() {
   log('info', '[~] Message saved');
 }
 
+// ── Templates ─────────────────────────────────────────────────────────────────
+function saveTemplates() {
+  S.set('templates', templates);
+  renderTemplates();
+}
+
+function saveMessageAs() {
+  const content = document.getElementById('dm-message').value.trim();
+  if (!content) { modalAlert('write a message first.'); return; }
+  modalPrompt('template name:', '', name => {
+    templates.push({ id: Date.now(), name, content });
+    saveTemplates();
+  });
+}
+
+function loadTemplate(id) {
+  const t = templates.find(t => t.id === id);
+  if (!t) return;
+  document.getElementById('dm-message').value = t.content;
+}
+
+function editTemplate(id) {
+  const t = templates.find(t => t.id === id);
+  if (!t) return;
+  modalPrompt('rename template:', t.name, name => {
+    t.name = name;
+    saveTemplates();
+  });
+}
+
+function deleteTemplate(id) {
+  modalConfirm('delete this template?', () => {
+    templates = templates.filter(t => t.id !== id);
+    saveTemplates();
+  });
+}
+
+function renderTemplates() {
+  const el = document.getElementById('tpl-list');
+  const count = document.getElementById('tpl-count');
+  if (!el) return;
+  count.textContent = templates.length;
+  if (!templates.length) { el.innerHTML = '<p class="empty">no templates saved.</p>'; return; }
+  el.innerHTML = templates.map(t => `
+    <div class="tpl-item">
+      <div class="tpl-name" onclick="loadTemplate(${t.id})" title="click to load">${esc(t.name)}</div>
+      <div class="tpl-preview">${esc(t.content.slice(0, 80))}${t.content.length > 80 ? '…' : ''}</div>
+      <div class="tpl-actions">
+        <button class="btn-ghost btn-xs" onclick="loadTemplate(${t.id})">load</button>
+        <button class="btn-ghost btn-xs" onclick="editTemplate(${t.id})">rename</button>
+        <button class="btn-del btn-xs" onclick="deleteTemplate(${t.id})">✕</button>
+      </div>
+    </div>`).join('');
+}
+
 // ── Stats ─────────────────────────────────────────────────────────────────────
 function updateStats() {
   document.getElementById('stat-sent').textContent   = statSent;
@@ -279,7 +379,351 @@ async function dPost(path, token, body) {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// ── Token Checker ─────────────────────────────────────────────────────────────
+// ── Server Checker ────────────────────────────────────────────────────────────
+let scRunning = false;
+
+async function checkAllServers() {
+  if (scRunning) return;
+  if (!tokens.length) { modalAlert('no tokens loaded.'); return; }
+  scRunning = true;
+
+  const statusEl = document.getElementById('sc-status');
+  const el       = document.getElementById('sc-result');
+  el.innerHTML   = '<p class="dim-text">collecting guilds...</p>';
+  document.getElementById('sc-count').textContent = '0';
+
+  // step 1: collect unique guild ids across all tokens
+  const guildTokenMap = {}; // { guildId: firstWorkingToken }
+  for (let i = 0; i < tokens.length; i++) {
+    statusEl.textContent = `token ${i+1}/${tokens.length}...`;
+    try {
+      const guilds = await dGet('/users/@me/guilds', tokens[i]);
+      for (const g of guilds) {
+        if (!guildTokenMap[g.id]) guildTokenMap[g.id] = tokens[i];
+      }
+    } catch {}
+    await sleep(300);
+  }
+
+  const guildIds = Object.keys(guildTokenMap);
+  if (!guildIds.length) {
+    el.innerHTML = '<p class="empty">no servers found.</p>';
+    statusEl.textContent = '';
+    scRunning = false;
+    return;
+  }
+
+  // step 2: fetch full info for each unique guild
+  el.innerHTML = '';
+  let fetched = 0;
+  for (const gid of guildIds) {
+    statusEl.textContent = `fetching ${fetched+1}/${guildIds.length}...`;
+    try {
+      const guild = await dGet(`/guilds/${gid}?with_counts=true`, guildTokenMap[gid]);
+      serverCache[gid] = guild;
+      fetched++;
+      document.getElementById('sc-count').textContent = fetched;
+      el.innerHTML += buildServerCard(guild);
+    } catch {
+      // skip guilds we can't fetch
+    }
+    await sleep(300);
+  }
+
+  S.set('serverCache', serverCache);
+  statusEl.textContent = '';
+  if (!fetched) el.innerHTML = '<p class="empty">could not fetch any server info.</p>';
+  scRunning = false;
+}
+
+function clearServerCache() {
+  serverCache = {};
+  S.set('serverCache', {});
+  document.getElementById('sc-result').innerHTML = '<p class="empty">run server checker to see results.</p>';
+  document.getElementById('sc-count').textContent = '0';
+}
+
+function buildServerCard(g) {
+  const iconUrl = g.icon
+    ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png?size=64`
+    : null;
+  const iconHtml = iconUrl
+    ? `<img class="server-icon" src="${iconUrl}" onerror="this.outerHTML='<div class=server-icon-ph>${esc(g.name[0])}</div>'">`
+    : `<div class="server-icon-ph">${esc(g.name[0])}</div>`;
+
+  const rows = [
+    ['id',          esc(g.id)],
+    ['owner',       esc(g.owner_id)],
+    ['members',     g.approximate_member_count   != null ? g.approximate_member_count.toLocaleString()   : '—'],
+    ['online',      g.approximate_presence_count != null ? g.approximate_presence_count.toLocaleString() : '—'],
+    ['boost lvl',   g.premium_tier != null ? `level ${g.premium_tier}` : '—'],
+    ['verified',    g.verified ? 'yes' : 'no'],
+  ];
+
+  return `<div class="sc-card">
+    <div class="sc-header">
+      ${iconHtml}
+      <span class="sc-name">${esc(g.name)}</span>
+    </div>
+    <div class="sc-grid">
+      ${rows.map(([k,v]) => `<span class="sc-key">${k}</span><span class="sc-val">${v}</span>`).join('')}
+    </div>
+  </div>`;
+}
+
+function restoreServerCache() {
+  const ids = Object.keys(serverCache);
+  if (!ids.length) return;
+  const el = document.getElementById('sc-result');
+  el.innerHTML = ids.map(id => buildServerCard(serverCache[id])).join('');
+  document.getElementById('sc-count').textContent = ids.length;
+}
+
+
+// ── Embed Builder ─────────────────────────────────────────────────────────────
+function getEmbedPayload() {
+  const title      = document.getElementById('eb-title').value.trim();
+  const desc       = document.getElementById('eb-desc').value.trim();
+  const url        = document.getElementById('eb-url').value.trim();
+  const color      = parseInt(document.getElementById('eb-color').value.replace('#',''), 16);
+  const authorName = document.getElementById('eb-author-name').value.trim();
+  const authorIcon = document.getElementById('eb-author-icon').value.trim();
+  const thumbnail  = document.getElementById('eb-thumbnail').value.trim();
+  const image      = document.getElementById('eb-image').value.trim();
+  const footerText = document.getElementById('eb-footer-text').value.trim();
+  const footerIcon = document.getElementById('eb-footer-icon').value.trim();
+
+  const embed = { color };
+  if (title)      embed.title = title;
+  if (url)        embed.url   = url;
+  if (desc)       embed.description = desc;
+  if (authorName) embed.author = { name: authorName, ...(authorIcon && { icon_url: authorIcon }) };
+  if (thumbnail)  embed.thumbnail = { url: thumbnail };
+  if (image)      embed.image     = { url: image };
+  if (footerText) embed.footer = { text: footerText, ...(footerIcon && { icon_url: footerIcon }) };
+  return embed;
+}
+
+function renderEmbedPreview() {
+  const color      = document.getElementById('eb-color').value;
+  const title      = document.getElementById('eb-title').value.trim();
+  const desc       = document.getElementById('eb-desc').value.trim();
+  const url        = document.getElementById('eb-url').value.trim();
+  const authorName = document.getElementById('eb-author-name').value.trim();
+  const authorIcon = document.getElementById('eb-author-icon').value.trim();
+  const thumbnail  = document.getElementById('eb-thumbnail').value.trim();
+  const image      = document.getElementById('eb-image').value.trim();
+  const footerText = document.getElementById('eb-footer-text').value.trim();
+  const footerIcon = document.getElementById('eb-footer-icon').value.trim();
+
+  document.getElementById('de-pill').style.background = color;
+
+  const authorEl = document.getElementById('de-author');
+  if (authorName) {
+    authorEl.style.display = 'flex';
+    document.getElementById('de-author-name').textContent = authorName;
+    const ai = document.getElementById('de-author-icon');
+    if (authorIcon) { ai.src = authorIcon; ai.style.display = ''; }
+    else ai.style.display = 'none';
+  } else { authorEl.style.display = 'none'; }
+
+  const titleEl = document.getElementById('de-title');
+  if (title) {
+    titleEl.innerHTML = url ? `<a href="${esc(url)}" target="_blank">${esc(title)}</a>` : esc(title);
+    titleEl.style.display = '';
+  } else { titleEl.style.display = 'none'; }
+
+  const descEl = document.getElementById('de-desc');
+  descEl.textContent = desc;
+  descEl.style.display = desc ? '' : 'none';
+
+  const imgEl = document.getElementById('de-image');
+  if (image) { imgEl.src = image; imgEl.style.display = ''; }
+  else imgEl.style.display = 'none';
+
+  const thumbEl = document.getElementById('de-thumbnail');
+  if (thumbnail) { thumbEl.src = thumbnail; thumbEl.style.display = ''; }
+  else thumbEl.style.display = 'none';
+
+  const footerEl = document.getElementById('de-footer');
+  if (footerText) {
+    footerEl.style.display = 'flex';
+    document.getElementById('de-footer-text').textContent = footerText;
+    const fi = document.getElementById('de-footer-icon');
+    if (footerIcon) { fi.src = footerIcon; fi.style.display = ''; }
+    else fi.style.display = 'none';
+  } else { footerEl.style.display = 'none'; }
+
+  document.getElementById('eb-json').textContent = JSON.stringify({ embeds: [getEmbedPayload()] }, null, 2);
+}
+
+async function sendEmbed() {
+  if (!tokens.length) { modalAlert('no tokens loaded.'); return; }
+  const channelId = document.getElementById('eb-channel-id').value.trim();
+  if (!channelId) { modalAlert('enter a channel id.'); return; }
+  const statusEl = document.getElementById('eb-status');
+  statusEl.textContent = 'sending...';
+  const embed = getEmbedPayload();
+  let sent = false;
+  for (const t of tokens) {
+    try {
+      const res = await dPost(`/channels/${channelId}/messages`, t, { embeds: [embed] });
+      if (res.ok) { sent = true; break; }
+    } catch {}
+  }
+  statusEl.textContent = sent ? '✓ sent to channel' : '✗ failed';
+  setTimeout(() => statusEl.textContent = '', 3000);
+}
+
+async function sendEmbedDM() {
+  if (!tokens.length) { modalAlert('no tokens loaded.'); return; }
+  const guildId = document.getElementById('eb-guild-id').value.trim();
+  if (!guildId) { modalAlert('enter a guild id.'); return; }
+  const statusEl = document.getElementById('eb-status');
+  const embed = getEmbedPayload();
+
+  statusEl.textContent = 'fetching members...';
+  let members = [];
+  for (const t of tokens) {
+    try {
+      members = await fetchGuildMembers(guildId, t);
+      if (members.length) break;
+    } catch {}
+  }
+  if (!members.length) { statusEl.textContent = '✗ no members found'; return; }
+
+  statusEl.textContent = `sending to ${members.length} members...`;
+  let sent = 0, failed = 0;
+  for (let i = 0; i < members.length; i++) {
+    const uid   = members[i].id;
+    const token = tokens[i % tokens.length];
+    try {
+      const chanRes = await dPost('/users/@me/channels', token, { recipient_id: uid });
+      if (!chanRes.ok) throw new Error();
+      const chan   = await chanRes.json();
+      const msgRes = await dPost(`/channels/${chan.id}/messages`, token, { embeds: [embed] });
+      if (msgRes.ok) sent++; else failed++;
+    } catch { failed++; }
+    await sleep(dmDelay * 1000);
+  }
+  statusEl.textContent = `✓ sent: ${sent}, failed: ${failed}`;
+  setTimeout(() => statusEl.textContent = '', 5000);
+}
+
+// ── Webhook ───────────────────────────────────────────────────────────────────
+function renderWebhookPreview() {
+  const username = document.getElementById('wh-username').value.trim();
+  const avatar   = document.getElementById('wh-avatar').value.trim();
+  const content  = document.getElementById('wh-content').value;
+  const useEmbed = document.getElementById('wh-embed').checked;
+
+  // name
+  document.getElementById('wh-preview-name').textContent = username || 'webhook';
+
+  // avatar
+  const img = document.getElementById('wh-avatar-img');
+  if (avatar) { img.src = avatar; img.style.display = ''; }
+  else img.style.display = 'none';
+
+  // content
+  const contentEl = document.getElementById('wh-preview-content');
+  contentEl.textContent = content;
+  contentEl.style.display = content ? '' : 'none';
+
+  // embed mirror
+  const embedWrap = document.getElementById('wh-preview-embed-wrap');
+  if (useEmbed) {
+    embedWrap.style.display = '';
+    const color      = document.getElementById('eb-color').value;
+    const title      = document.getElementById('eb-title').value.trim();
+    const desc       = document.getElementById('eb-desc').value.trim();
+    const url        = document.getElementById('eb-url').value.trim();
+    const authorName = document.getElementById('eb-author-name').value.trim();
+    const authorIcon = document.getElementById('eb-author-icon').value.trim();
+    const thumbnail  = document.getElementById('eb-thumbnail').value.trim();
+    const image      = document.getElementById('eb-image').value.trim();
+    const footerText = document.getElementById('eb-footer-text').value.trim();
+    const footerIcon = document.getElementById('eb-footer-icon').value.trim();
+
+    document.getElementById('wh-de-pill').style.background = color;
+
+    const authorEl = document.getElementById('wh-de-author');
+    if (authorName) {
+      authorEl.style.display = 'flex';
+      document.getElementById('wh-de-author-name').textContent = authorName;
+      const ai = document.getElementById('wh-de-author-icon');
+      if (authorIcon) { ai.src = authorIcon; ai.style.display = ''; } else ai.style.display = 'none';
+    } else authorEl.style.display = 'none';
+
+    const titleEl = document.getElementById('wh-de-title');
+    if (title) {
+      titleEl.innerHTML = url ? `<a href="${esc(url)}" target="_blank">${esc(title)}</a>` : esc(title);
+      titleEl.style.display = '';
+    } else titleEl.style.display = 'none';
+
+    const descEl = document.getElementById('wh-de-desc');
+    descEl.textContent = desc; descEl.style.display = desc ? '' : 'none';
+
+    const imgEl = document.getElementById('wh-de-image');
+    if (image) { imgEl.src = image; imgEl.style.display = ''; } else imgEl.style.display = 'none';
+
+    const thumbEl = document.getElementById('wh-de-thumbnail');
+    if (thumbnail) { thumbEl.src = thumbnail; thumbEl.style.display = ''; } else thumbEl.style.display = 'none';
+
+    const footerEl = document.getElementById('wh-de-footer');
+    if (footerText) {
+      footerEl.style.display = 'flex';
+      document.getElementById('wh-de-footer-text').textContent = footerText;
+      const fi = document.getElementById('wh-de-footer-icon');
+      if (footerIcon) { fi.src = footerIcon; fi.style.display = ''; } else fi.style.display = 'none';
+    } else footerEl.style.display = 'none';
+  } else {
+    embedWrap.style.display = 'none';
+  }
+}
+async function sendWebhook() {
+  const url      = document.getElementById('wh-url').value.trim();
+  const content  = document.getElementById('wh-content').value.trim();
+  const username = document.getElementById('wh-username').value.trim();
+  const avatar   = document.getElementById('wh-avatar').value.trim();
+  const useEmbed = document.getElementById('wh-embed').checked;
+  const logEl    = document.getElementById('wh-log');
+  const statusEl = document.getElementById('wh-status');
+
+  if (!url) { modalAlert('enter a webhook url.'); return; }
+  if (!content && !useEmbed) { modalAlert('add a message or attach an embed.'); return; }
+
+  const body = {};
+  if (content)  body.content  = content;
+  if (username) body.username = username;
+  if (avatar)   body.avatar_url = avatar;
+  if (useEmbed) body.embeds = [getEmbedPayload()];
+
+  statusEl.textContent = 'sending...';
+  logEl.innerHTML += `<div class="log-line log-info">[~] posting to webhook...</div>`;
+
+  try {
+    const res = await fetch(PROXY(url), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (res.ok || res.status === 204) {
+      logEl.innerHTML += `<div class="log-line log-ok">[✓] delivered.</div>`;
+      statusEl.textContent = '✓ sent';
+    } else {
+      const b = await res.json().catch(() => ({}));
+      logEl.innerHTML += `<div class="log-line log-err">[✗] HTTP ${res.status} — ${b.message || ''}</div>`;
+      statusEl.textContent = '✗ failed';
+    }
+  } catch(e) {
+    logEl.innerHTML += `<div class="log-line log-err">[✗] ${e.message}</div>`;
+    statusEl.textContent = '✗ error';
+  }
+  logEl.scrollTop = logEl.scrollHeight;
+  setTimeout(() => statusEl.textContent = '', 3000);
+}
+
 async function checkTokens() {
   if (!tokens.length) { modalAlert('no tokens loaded.'); return; }
   const el = document.getElementById('checker-results');
@@ -385,7 +829,7 @@ async function dmGlobal() {
   }
   const guildIds = Object.keys(guildMap);
   log('info', `[~] ${guildIds.length} guild(s). Fetching members...`);
-  const seen = new Set();
+  const seen = new Map(); // id -> { id, username }
   for (let gi = 0; gi < guildIds.length; gi++) {
     if (dmStop) break;
     const gid = guildIds[gi];
@@ -394,7 +838,7 @@ async function dmGlobal() {
     for (const t of guildMap[gid]) {
       try {
         const members = await fetchGuildMembers(gid, t);
-        members.forEach(u => seen.add(u));
+        members.forEach(u => { if (!seen.has(u.id)) seen.set(u.id, u); });
         log('ok', `[✓] ${members.length} member(s) from ${gid}`);
         ok = true; break;
       } catch(e) { log('err', `[✗] ${gid}: ${e.message}`); }
@@ -402,9 +846,9 @@ async function dmGlobal() {
     if (!ok) log('warn', `[~] Skipped ${gid}`);
     setProgress((gi+1) / guildIds.length * 50);
   }
-  const allIds = [...seen];
-  log('info', `[~] ${allIds.length} unique user(s). Sending DMs...`);
-  await dmMembers(allIds, tokens);
+  const allEntries = [...seen.values()];
+  log('info', `[~] ${allEntries.length} unique user(s). Sending DMs...`);
+  await dmMembers(allEntries, tokens);
 }
 
 async function fetchGuildMembers(guildId, token) {
@@ -413,40 +857,84 @@ async function fetchGuildMembers(guildId, token) {
   while (true) {
     const chunk = await dGet(`/guilds/${guildId}/members?limit=1000&after=${after}`, token);
     if (!chunk.length) break;
-    chunk.forEach(m => { if (!m.user.bot) members.push(m.user.id); });
+    chunk.forEach(m => {
+      if (!m.user.bot) members.push({ id: m.user.id, username: m.user.username });
+    });
     if (chunk.length < 1000) break;
     after = chunk[chunk.length - 1].user.id;
   }
   return members;
 }
 
-async function dmMembers(userIds, toks) {
-  for (let i = 0; i < userIds.length; i++) {
-    if (dmStop) break;
-    const uid   = userIds[i];
-    const token = toks[i % toks.length];
-    try {
-      const chanRes = await dPost('/users/@me/channels', token, { recipient_id: uid });
-      if (!chanRes.ok) throw new Error('open DM HTTP ' + chanRes.status);
-      const chan   = await chanRes.json();
-      const msgRes = await dPost(`/channels/${chan.id}/messages`, token, { content: dmMessage });
-      if (msgRes.ok) {
-        statSent++;
-        if (tokenStats[token]) tokenStats[token].sent++;
-        log('ok', `[✓] sent → ${uid}`);
-      } else {
-        const b = await msgRes.json().catch(() => ({}));
-        throw new Error(`HTTP ${msgRes.status} code=${b.code||'?'}`);
+// ── Variable substitution ─────────────────────────────────────────────────────
+const DISCORD_ERRORS = {
+  50007: 'cannot send messages to this user (DMs closed)',
+  50278: 'user cannot be DMed (no mutual server or DMs disabled)',
+  50013: 'missing permissions',
+  50001: 'missing access',
+  10013: 'unknown user',
+  40001: 'unauthorized',
+  20009: 'explicit content blocked',
+  50035: 'invalid form body',
+};
+
+function applyVars(template, user) {
+  // user = { id, username }
+  return template
+    .replace(/\{username\}/gi,  user.username || 'user')
+    .replace(/\{userid\}/gi,    user.id)
+    .replace(/\{mention\}/gi,   `<@${user.id}>`)
+    .replace(/<@userid>/gi,     `<@${user.id}>`);
+}
+
+async function dmMembers(userEntries, toks) {
+  if (!toks.length) return;
+
+  // split entries evenly across tokens and run all concurrently
+  const chunks = toks.map((_, ti) =>
+    userEntries.filter((_, i) => i % toks.length === ti)
+  );
+
+  const total = userEntries.length;
+  let done = 0;
+
+  await Promise.all(chunks.map(async (chunk, ti) => {
+    const token = toks[ti];
+    for (const entry of chunk) {
+      if (dmStop) break;
+      const uid = typeof entry === 'string' ? entry : entry.id;
+      const user = typeof entry === 'string' ? { id: entry, username: 'user' } : entry;
+      try {
+        const chanRes = await dPost('/users/@me/channels', token, { recipient_id: uid });
+        if (!chanRes.ok) {
+          const b = await chanRes.json().catch(() => ({}));
+          const reason = DISCORD_ERRORS[b.code] || b.message || '?';
+          throw new Error(`open DM failed — ${reason}`);
+        }
+        const chan    = await chanRes.json();
+        const content = applyVars(dmMessage, user);
+        const msgRes  = await dPost(`/channels/${chan.id}/messages`, token, { content });
+        if (msgRes.ok) {
+          statSent++;
+          if (tokenStats[token]) tokenStats[token].sent++;
+          const botName = tokenMeta[token]?.username || mask(token);
+          log('ok', `[✓] ${uid} | ${user.username} — via ${botName}`);
+        } else {
+          const b = await msgRes.json().catch(() => ({}));
+          const reason = DISCORD_ERRORS[b.code] || b.message || '?';
+          throw new Error(`HTTP ${msgRes.status} — ${reason}`);
+        }
+      } catch(e) {
+        statFailed++;
+        if (tokenStats[token]) tokenStats[token].failed++;
+        log('err', `[✗] ${uid} | ${user.username} — ${e.message}`);
       }
-    } catch(e) {
-      statFailed++;
-      if (tokenStats[token]) tokenStats[token].failed++;
-      log('err', `[✗] failed → ${uid} (${e.message})`);
+      done++;
+      updateStats();
+      setProgress(50 + done / total * 50);
+      await sleep(dmDelay * 1000);
     }
-    updateStats();
-    setProgress(50 + (i+1) / userIds.length * 50);
-    await sleep(dmDelay * 1000);
-  }
+  }));
 }
 
 init();
